@@ -1,21 +1,55 @@
-// Index router - WSK checked
 const express = require('express');
-const router = express.Router();
+const session = require('express-session');
+const exphbs = require('express-handlebars');
+const sequelize = require("./config/connection.js");
+const SequelizeStore = require('connect-session-sequelize')(session.Store);
+const routes = require("./controllers");
+const { createServer } = require('http');
+const { Server } = require('socket.io');
 
-// Front End Handlebars Work
-const frontEndRoutes = require("./frontEndRoute");
-router.use("/", frontEndRoutes);
 
-// Back End SQL Work
-const apiRoutes = require("./api");
-router.use("/api", apiRoutes);
+// Sets up the Express App
+// =============================================================
+const app = express();
+const socketServer = require('./controllers/socketServer');
+const httpServer = createServer(app);
+const io = new Server(httpServer);
+socketServer(io);
 
-// Log sessions
-// TO-DO Check this vs
-router.get("/sessions",(req,res)=>{
-    res.json(req.session)
-})
-// const sessionRoutes = require("./sessionsRoutes/sessionsRoutes")
-// router.use("/sessions", sessionRoutes)
+const PORT = process.env.PORT || 3000;
 
-module.exports = router;
+// Requiring our models for syncing
+const {User, UserFriends, Lobby} = require('./models');
+
+const sess = {
+    secret: process.env.SESSION_SECRET,
+    // cookie: {
+    //     maxAge:1000*60*60*2
+    // },
+    resave: false,
+    saveUninitialized: true,
+    store: new SequelizeStore({
+        db: sequelize
+    })
+};
+
+app.use(session(sess));
+// Sets up the Express app to handle data parsing
+app.use(express.urlencoded({ extended: true }));
+app.use(express.json());
+
+// Static directory
+app.use(express.static('public'));
+
+
+const hbs = exphbs.create({});
+app.engine('handlebars', hbs.engine);
+app.set('view engine', 'handlebars');
+
+app.use("/", routes);
+
+sequelize.sync({ force: false }).then(function() {
+    httpServer.listen(PORT, function() {
+    console.log('App listening on PORT ' + PORT);
+    });
+});
